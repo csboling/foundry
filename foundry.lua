@@ -220,7 +220,7 @@ function key(n, z)
   if n==1 then
     show_font_list = z == 1
     redraw()
-  elseif n == 2 and z == 1 then
+  elseif n == 2 then
     if ui_page == 'glyphviz' then
       ui_page = 'glyphsel'
       glyph_fastforward = false
