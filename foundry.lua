@@ -125,6 +125,10 @@ function sign(x)
   return (x > 0 and 1) or (x == 0 and 0) or -1
 end
 
+function encode_glyph(x)
+  return '\\u{' .. string.format('%03x', x) .. '}'
+end
+
 function set_glyph(i)
   glyph_sel = i
   glyph_sel_y = math.floor(glyph_sel / 16)
@@ -188,12 +192,20 @@ local font_params = {
   },
   {
     name = 'code',
+    show = function()
+      return encode_glyph(glyph_sel)
+    end,
+    delta = function(d)
+      if d == 0 then return end
+      glyph_delta(d)
+      redraw()
+    end,
     click = function(z)
       if z == 0 then return end
       print('screen.level(' .. font_level .. ')')
       print('screen.font_face(' .. font_sel .. ')')
       print('screen.font_size(' .. font_size .. ')')
-      print('screen.text(utf8.char(' .. glyph_sel .. ')')
+      print('screen.text(\'' .. encode_glyph(glyph_sel) .. '\')')
     end,
   },
   {
