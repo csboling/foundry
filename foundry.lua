@@ -1,13 +1,38 @@
--- foundry - view and modify norns fonts
+-- foundry - view norns fonts
 --
 -- E1 at any time to change font
---    hold E1 to see the font name list
+--    hold E1 to see font names
 --
--- K3 descends down a UI level, K2 ascends
+-- K3 descends down a UI level
+-- K2 ascends up a UI level
 --
 -- first level: glyph selector
---   E2 selects x position
---   E3 selects y position
+--   E2 selects y position
+--
+--   E3 selects x position
+--
+--   hold K2: y scrolls 8x
+--
+-- second level: glyph viewer
+--   E2 selects parameter
+--
+--   E3 selects parameter value
+--
+--   hold K3: scroll glyphs 100x
+--
+--   press K3 on 'code':
+--   print glyph drawing code to
+--   the console (maiden)
+--
+--   press K3 on 'text':
+--   enter text input mode
+--
+-- third level: text input
+--   attach a keyboard to
+--   type example text
+--   K3 to clear
+
+local keycodes = include("lib/keycodes")
 
 local font_names = {
   '04B_03',
@@ -87,12 +112,14 @@ glyph_sel_x = 0
 glyph_sel_y = 3
 font_param_sel = 1
 antialias = 0
+glyph_fastforward = false
 keys_held = {false, false}
+text_lines = {''}
 
--- 'glyphsel', 'glyphviz'
+-- 'glyphsel', 'glyphviz', 'textinput'
 ui_page = 'glyphsel'
 
-MAX_GLYPH = 65535
+MAX_GLYPH = 32767
 
 function sign(x)
   return (x > 0 and 1) or (x == 0 and 0) or -1
@@ -105,7 +132,11 @@ function set_glyph(i)
 end
 
 function glyph_delta(d)
-  set_glyph(util.clamp(glyph_sel + sign(d), 0, MAX_GLYPH))
+  local change = sign(d)
+  if glyph_fastforward then
+    change = change * 100
+  end
+  set_glyph(util.clamp(glyph_sel + change, 0, MAX_GLYPH))
 end
 
 local font_params = {
@@ -116,6 +147,9 @@ local font_params = {
       if d == 0 then return end
       glyph_delta(d)
       redraw()
+    end,
+    click = function(z)
+      glyph_fastforward = z == 1
     end,
   },
   {
@@ -154,7 +188,7 @@ local font_params = {
   },
   {
     name = 'code',
-    click = function()
+    click = function(z)
       if z == 0 then return end
       print('screen.level(' .. font_level .. ')')
       print('screen.font_face(' .. font_sel .. ')')
@@ -162,31 +196,56 @@ local font_params = {
       print('screen.text(utf8.char(' .. glyph_sel .. ')')
     end,
   },
+  {
+    name = 'text',
+    click = function(z)
+      if z == 0 then return end
+      ui_page = 'textinput'
+      glyph_fastforward = false
+    end
+  },
 }
 
 local show_font_list = false
 
 function init()
   screen.aa(0)
+
+  keyb = hid.connect()
+  keyb.event = keyboard_event
 end
 
+-- gpio
 function key(n, z)
   if n==1 then
     show_font_list = z == 1
     redraw()
-  elseif z == 1 and n == 2 then
+  elseif n == 2 and z == 1 then
     if ui_page == 'glyphviz' then
       ui_page = 'glyphsel'
+      glyph_fastforward = false
+      redraw()
+    elseif ui_page == 'glyphsel' then
+      glyph_fastforward = z == 1
+    elseif ui_page == 'textinput' then
+      ui_page = 'glyphviz'
       redraw()
     end
-  elseif z == 1 and n == 3 then
+  elseif n == 3 then
     if ui_page == 'glyphsel' then
+      glyph_fastforward = false
       ui_page = 'glyphviz'
     elseif ui_page == 'glyphviz' then
       local font_param = font_params[font_param_sel]
+      if font_param.name ~= 'glyph' then
+        glyph_fastforward = 1
+      end
       if font_param.click ~= nil then
         font_param.click(z)
       end
+    elseif ui_page == 'textinput' and z == 1 then
+      text_lines = {''}
+      redraw()
     end
     redraw()
   end
@@ -200,26 +259,102 @@ function enc(n, d)
     -- glyph select
     if ui_page == 'glyphsel' then
       if n == 2 then
-        glyph_sel_x = util.clamp(glyph_sel_x + sign(d), 0, 15)
-	set_glyph(16*glyph_sel_y + glyph_sel_x)
+        local change = sign(d)
+        if glyph_fastforward then
+          change = change * 8
+        end
+        glyph_sel_y = util.clamp(glyph_sel_y + change, 0, MAX_GLYPH / 16)
+        set_glyph(16*glyph_sel_y + glyph_sel_x)
         redraw()
       elseif n == 3 then
-        glyph_sel_y = util.clamp(glyph_sel_y + sign(d), 0, MAX_GLYPH / 16)
-	set_glyph(16*glyph_sel_y + glyph_sel_x)
+        glyph_sel_x = util.clamp(glyph_sel_x + sign(d), 0, 15)
+        set_glyph(16*glyph_sel_y + glyph_sel_x)
         redraw()
       end
     -- glyph viewer
     elseif ui_page == 'glyphviz' then
       if n == 2 then
-	font_param_sel = util.clamp(font_param_sel + sign(d), 1, #font_params)
+        font_param_sel = util.clamp(font_param_sel + sign(d), 1, #font_params)
         redraw()
       elseif n == 3 then
-	local font_param = font_params[font_param_sel]
-	if font_param.delta ~= nil then
-	  font_param.delta(d)
-	end
+        local font_param = font_params[font_param_sel]
+        if font_param.delta ~= nil then
+         font_param.delta(d)
+        end
       end
     end
+  end
+end
+
+-- keyboard
+function get_key(code, val, shift)
+  if keycodes.keys[code] ~= nil and val == 1 then
+    if shift then
+      if keycodes.shifts[code] ~= nil then
+        return keycodes.shifts[code]
+      else
+        print('code ' .. code .. ' -> ' .. keycodes.keys[code])
+        return keycodes.keys[code]
+      end
+    else
+      return string.lower(keycodes.keys[code])
+    end
+  end
+end
+
+shift_held = false
+function keyboard_event(typ, code, val)
+  if code == hid.codes.KEY_BACKSPACE and val > 0 then
+    backspace()
+  elseif code == hid.codes.KEY_LEFTSHIFT or code == hid.codes.KEY_RIGHTSHIFT then
+    -- print('shift ' .. typ .. ' ' .. val)
+    if val == 1 then
+      -- print('shift down')
+      shift_held = true
+    else
+      -- print('shift up')
+      shift_held = false
+    end
+  end
+  keyinput = get_key(code, val, shift_held)
+  if keyinput ~= nil then
+    keystroke(keyinput)
+  end
+end
+
+function keystroke(k)
+  if ui_page == 'textinput' then
+    local new_text = text_lines[#text_lines] .. k
+    screen.font_face(font_sel)
+    screen.font_size(font_size)
+    local text_width = screen.text_extents(new_text)
+    if text_width > 128 then
+      if (#text_lines + 1) * font_size > 64 then
+        return
+      end
+      text_lines[#text_lines + 1] = k
+    else
+      text_lines[#text_lines] = new_text
+    end
+    redraw()
+  end
+end
+
+function backspace()
+  if ui_page == 'textinput' then
+    local line = text_lines[#text_lines]
+    local line_len = string.len(line)
+    if line_len == 0 then
+      if #text_lines == 1 then
+        return
+      else
+        table.remove(text_lines)
+        line = text_lines[#text_lines]
+        line_len = string.len(line)
+      end
+    end
+    text_lines[#text_lines] = string.sub(line, 0, line_len - 1)
+    redraw()
   end
 end
 
@@ -295,16 +430,27 @@ function redraw()
       screen.text(font_sel .. ' ' .. font_names[font_sel])
 
       for i=1,#font_params do
-	local font_param = font_params[i]
+        local font_param = font_params[i]
 
-	screen.level(font_param_sel == i and 10 or 4)
-	y = y + 8
-	screen.move(x, y)
-	screen.text(font_param.name)
-	if font_param.show ~= nil then
+        screen.level(font_param_sel == i and 10 or 4)
+        y = y + 8
+        screen.move(x, y)
+        screen.text(font_param.name)
+        if font_param.show ~= nil then
           screen.move(x + 32, y)
-	  screen.text(font_param.show())
-	end
+          screen.text(font_param.show())
+        end
+      end
+    elseif ui_page == 'textinput' then
+      x = 0
+      y = font_size
+      screen.level(font_level)
+      screen.font_face(font_sel)
+      screen.font_size(font_size)
+      for i=1,#text_lines do
+        screen.move(x, y)
+        screen.text(text_lines[i])
+	y = y + font_size
       end
     end
   end
