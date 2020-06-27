@@ -293,7 +293,6 @@ function get_key(code, val, shift)
       if keycodes.shifts[code] ~= nil then
         return keycodes.shifts[code]
       else
-        print('code ' .. code .. ' -> ' .. keycodes.keys[code])
         return keycodes.keys[code]
       end
     else
@@ -307,12 +306,9 @@ function keyboard_event(typ, code, val)
   if code == hid.codes.KEY_BACKSPACE and val > 0 then
     backspace()
   elseif code == hid.codes.KEY_LEFTSHIFT or code == hid.codes.KEY_RIGHTSHIFT then
-    -- print('shift ' .. typ .. ' ' .. val)
     if val == 1 then
-      -- print('shift down')
       shift_held = true
     else
-      -- print('shift up')
       shift_held = false
     end
   end
@@ -368,7 +364,6 @@ function redraw()
   if show_font_list then
     local show_font_start = math.max(font_sel - 4, 1)
     local show_font_end = math.min(font_sel + 7, #font_names)
-    print('show fonts ' .. show_font_start .. ' thru ' .. show_font_end)
     for i=show_font_start,show_font_end do
       if font_sel == i then
         l = 10
