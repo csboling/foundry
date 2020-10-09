@@ -1,7 +1,7 @@
 -- foundry - view norns fonts
 --
 -- E1 at any time to change font
---    hold E1 to see font names
+--    hold K1 to see font names
 --
 -- K3 descends down a UI level
 -- K2 ascends up a UI level
